@@ -70,7 +70,8 @@ static std::string getfirstFiveChars(uint64_t kmer)
 
 std::vector<KmerFile *> FastqReader::generateKmers(size_t kmersize)
 {
-	std::vector<std::string> filenames;
+	std::map<std::string, std::vector<uint64_t>> buffer;
+	size_t counter = 0;
 	std::string line;
 	while (readNextSequence(line))
 	{
@@ -79,8 +80,19 @@ std::vector<KmerFile *> FastqReader::generateKmers(size_t kmersize)
 		{
 			auto firstFive = getfirstFiveChars(kmer);
 #ifdef USE_GZIP 
-			std::string s = pair.second.str();
-			writeCompressedFile(filename_map[pair.first], s.c_str(), s.size());
+			buffer[firstFive].push_back(kmer);
+			counter++;
+			if (counter == 1000)
+			{
+				for (auto &pair : buffer)
+				{
+					if (pair.second.size() > 0)
+					{
+						writeCompressedFile(filename_map[pair.first], &pair.second[0], pair.second.size() * sizeof(uint64_t));
+					}
+				}
+				buffer.clear();
+			}
 #else
 			*filename_map[firstFive] << kmer << '\n';
 #endif
@@ -96,6 +108,16 @@ std::vector<KmerFile *> FastqReader::generateKmers(size_t kmersize)
 				filename_fastq_map[firstFive] = fastqFile;
 			}
 		}
+#ifdef USE_GZIP 
+			for (auto &pair : buffer)
+			{
+				if (pair.second.size() > 0)
+				{
+					writeCompressedFile(filename_map[pair.first], &pair.second[0], pair.second.size() * sizeof(uint64_t));
+				}
+			}
+			buffer.clear();
+#endif
 		/*
 		 *
 		auto sequences = findKmers(line, kmersize);

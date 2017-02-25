@@ -12,6 +12,8 @@ public:
 	~BloomFilter();
 	void add(const std::string &) ;
 	bool contains(const std::string &) const;
+	void add(uint64_t) ;
+	bool contains(uint64_t) const;
 
 private:
 	std::vector<unsigned short> m_counters;

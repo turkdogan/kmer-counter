@@ -1,5 +1,6 @@
 #include "kmer_utils.h"
 #include <iostream>
+#include <sstream>
 
 #ifdef USE_GZIP 
 
@@ -19,14 +20,13 @@ void closeGzipFile(gzFile file)
 	gzclose(file);
 }
 
-size_t readcompressedFile(gzFile file, char *out, size_t len, bool newline)
+size_t readcompressedFile(gzFile file, void *out, size_t len)
 {
 	int err;
 	size_t bytes_read;
-	bytes_read = gzread(file, out, newline ? len + 1 : len);
-	out[newline ? bytes_read - 1 : bytes_read] = '\0';
+	bytes_read = gzread(file, out, len);
 	// printf ("%s", buffer);
-	if (bytes_read < len - 1) {
+	if (bytes_read < len) {
 		if (!gzeof(file)) {
 			const char * error_string;
 			error_string = gzerror(file, &err);
@@ -89,6 +89,19 @@ uint64_t dnaseq_encode(const char *s, size_t len)
 		ret |= v << nr_shift;
 	}
 	return ret;
+}
+
+std::string decodeSequence(uint64_t seq, size_t size)
+{
+	std::stringstream out;
+	size_t i = 0;
+	while (i < size)
+	{
+		out << bitstoc(seq & 3U);
+		seq = seq >> 2;
+		i++;
+	}
+	return out.str();
 }
 
 void decodeSequence(uint64_t seq, char *buf, size_t size)

@@ -12,7 +12,7 @@
 
 using namespace std;
 
-std::multimap<size_t, std::string> global_result;
+std::multimap<size_t, uint64_t> global_result;
 
 void getTopKmers(KmerFile *kmer_file, size_t kmersize, size_t topcount)
 {
@@ -22,9 +22,9 @@ void getTopKmers(KmerFile *kmer_file, size_t kmersize, size_t topcount)
 	delete kmer_counter;
 	map.clear();
 #ifdef USE_GZIP 
-		std::remove((kmer_file->filename + ".gz").c_str());
+		// std::remove((kmer_file->filename + ".gz").c_str());
 #else
-		// std::remove((kmer_file->filename).c_str());
+		std::remove((kmer_file->filename).c_str());
 #endif
 }
 
@@ -53,8 +53,8 @@ void runSingleThread(const char *filename, size_t kmersize, size_t topcount, con
 	while (iter != global_result.rend() && topcount > 0)
 	{
 		auto last_max_count = iter->first;
-		// std::cout << iter->first << " : " << iter->second << std::endl;
-		out << iter->first << " : " << iter->second << std::endl;
+		std::cout << iter->first << " : " << decodeSequence(iter->second, kmersize)<< std::endl;
+		out << iter->first << " : " << decodeSequence(iter->second, kmersize) << std::endl;
 
 		++iter;
 
@@ -96,6 +96,40 @@ char* getCmdOption(char ** begin, char ** end, const std::string & option)
 void printOptions()
 {
 	std::cout << "parameters should be: --filename ${filename} --kmersize ${size} --topcount {count}" << std::endl;
+}
+
+/*
+ * 		gzFile openGzipFile(const char *filename, const char *readWrite);
+		void closeGzipFile(gzFile file);
+		size_t readcompressedFile(gzFile file, void *out, size_t len);
+		void writeCompressedFile(gzFile file, const void *buffer, size_t len);
+
+ */
+
+void foo()
+{
+	uint64_t kmer = 0;
+	size_t len = 0;
+
+	std::string s = "GTAAACCCGTGTGTACGTAAACCCGTGTGT";
+	uint64_t encoded = encodeSequence(s);
+	uint64_t encoded_read = encodeSequence(s);
+
+#ifdef USE_GZIP 
+	gzFile file = openGzipFile("foo.gz", "w");
+	writeCompressedFile(file, &encoded, sizeof(encoded));
+	closeGzipFile(file);
+
+	file = openGzipFile("foo.gz", "r");
+	while ((len = readcompressedFile(file, &encoded_read, sizeof(encoded_read))) > 0)
+	{
+		std::cout << encoded << " " << encoded_read << " " << std::endl;
+		std::cout <<  decodeSequence(encoded_read, s.length()) << std::endl;
+		std::cout <<  s << std::endl;
+	}
+	closeGzipFile(file);
+#endif
+
 }
 
 int main(int argc, char **argv) 

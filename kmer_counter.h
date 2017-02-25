@@ -13,7 +13,7 @@ public:
 	TopKmerCounter(KmerFile *kmerfile, size_t kmersize, size_t topcount);
 	~TopKmerCounter();
 	
-	std::multimap<size_t, std::string> findTopKmers();
+	std::multimap<size_t, uint64_t> findTopKmers();
 
 
 private:
@@ -36,8 +36,8 @@ private:
 	 */
 	BloomFilter *m_bloom_filter;
 
-	std::map<std::string, size_t> m_kmer_to_count_map;
-	std::multimap<size_t, std::string> m_final_map;
+	std::map<uint64_t, size_t> m_kmer_to_count_map;
+	std::multimap<size_t, uint64_t> m_final_map;
 
 	void processMapWithoutBloomFilter();
 	void processMapWithBloomFilter();

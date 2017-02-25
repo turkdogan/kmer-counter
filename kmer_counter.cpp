@@ -36,11 +36,12 @@ TopKmerCounter::TopKmerCounter(KmerFile *kmerfile, size_t kmersize = 30, size_t 
  * Returns topcount k-mers in the given sequence file
  * The unique kmers are ignored. 
  */
-std::multimap<size_t, std::string> TopKmerCounter::findTopKmers()
+std::multimap<size_t, uint64_t> TopKmerCounter::findTopKmers()
 {
 	if (m_kmercount_in_sequence_file < BLOOM_FILTER_THRESHOLD)
 	{
-		processMapWithoutBloomFilter();
+		//processMapWithoutBloomFilter();
+		processMapWithBloomFilter();
 	}
 	else
 	{
@@ -53,18 +54,20 @@ std::multimap<size_t, std::string> TopKmerCounter::findTopKmers()
 void TopKmerCounter::processMapWithBloomFilter()
 {
 	m_bloom_filter = new BloomFilter(m_kmercount_in_sequence_file * 100, 4);
-	std::string kmer;
+	uint64_t kmer = 0;
+	std::map<uint64_t, size_t> map;
 
-#ifdef USE_GZIP 
+#ifdef USE_GZIP
 	size_t len;
-	char *buffer = new char[m_kmersize + 1];
-	while ((len = readcompressedFile(m_file, buffer, m_kmersize, true)) > 0)
+	//char *buffer = new char[m_kmersize + 1];
+	while ((len = readcompressedFile(m_file, &kmer, sizeof(kmer))) > 0)
 	{
-		kmer = std::string(buffer);
+		std::cout << decodeSequence(kmer, m_kmersize) << std::endl;
 #else
-	while (std::getline(m_file, kmer))
+	while (m_file.read((char*)&kmer, sizeof(kmer)))
 	{
 #endif
+		map[kmer]++;
 		// A couple of reason to "trust" bloom filter:
 		// 1 - False positive is ratio is very low, 
 		// because in every BUCKET_SIZE, bloom filter is cleared
@@ -75,7 +78,7 @@ void TopKmerCounter::processMapWithBloomFilter()
 		{
 			// if the bloom filter already contains
 			// add it to the counter hash table
-			// m_kmer_to_count_map[kmer]++;
+			m_kmer_to_count_map[kmer]++;
 		} 
 		else
 		{
@@ -96,6 +99,8 @@ void TopKmerCounter::processMapWithBloomFilter()
 
 void TopKmerCounter::processMapWithoutBloomFilter()
 {
+	/*
+	 *
 	std::string kmer;
 #ifdef USE_GZIP 
 	size_t len;
@@ -109,6 +114,7 @@ void TopKmerCounter::processMapWithoutBloomFilter()
 #endif
 		m_kmer_to_count_map[kmer]++;
 	}
+	 */
 }
 
 /*

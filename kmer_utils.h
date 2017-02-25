@@ -25,6 +25,7 @@ char bitstoc(unsigned int twobit);
  * Kmer is encoded as unsigned long long
  */
 void decodeSequence(uint64_t seq, char *buf, size_t size);
+std::string decodeSequence(uint64_t seq, size_t size);
 
 std::vector<std::string> generateAllThreeCharSequenceCombinations();
 	
@@ -32,7 +33,7 @@ std::vector<std::string> generateAllThreeCharSequenceCombinations();
 
 		gzFile openGzipFile(const char *filename, const char *readWrite);
 		void closeGzipFile(gzFile file);
-		size_t readcompressedFile(gzFile file, char *out, size_t len, bool newline);
+		size_t readcompressedFile(gzFile file, void *out, size_t len);
 		void writeCompressedFile(gzFile file, const void *buffer, size_t len);
 
 	#endif
