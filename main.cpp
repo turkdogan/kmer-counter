@@ -14,6 +14,15 @@ using namespace std;
 
 std::multimap<size_t, uint64_t> global_result;
 
+void deleteTempFile(const KmerFile *kmerFile)
+{
+#ifdef USE_GZIP 
+		std::remove((kmerFile->filename + ".gz").c_str());
+#else
+		std::remove((kmerFile->filename).c_str());
+#endif
+}
+
 void getTopKmers(KmerFile *kmer_file, size_t kmersize, size_t topcount)
 {
 	auto kmer_counter = new TopKmerCounter(kmer_file, kmersize, topcount);
@@ -21,16 +30,7 @@ void getTopKmers(KmerFile *kmer_file, size_t kmersize, size_t topcount)
 	global_result.insert(map.begin(), map.end());
 	delete kmer_counter;
 	map.clear();
-#ifdef USE_GZIP 
-		// std::remove((kmer_file->filename + ".gz").c_str());
-#else
-		std::remove((kmer_file->filename).c_str());
-#endif
-}
-
-void runMultiThread(const char *filename, size_t kmersize, size_t topcount, const char *outfilename)
-{
-	
+	deleteTempFile(kmer_file);
 }
 
 void runSingleThread(const char *filename, size_t kmersize, size_t topcount, const char *outfilename)
@@ -40,9 +40,18 @@ void runSingleThread(const char *filename, size_t kmersize, size_t topcount, con
 	auto kmer_files = fastq_reader->generateKmers(kmersize);
 	delete fastq_reader;
 
+
 	for (auto &kmer_file : kmer_files)
 	{
-		getTopKmers(kmer_file, kmersize, topcount);
+		// we do not need to 
+		if (kmer_file->kmercount > 0)
+		{
+			getTopKmers(kmer_file, kmersize, topcount);
+		} 
+		else
+		{
+			deleteTempFile(kmer_file);
+		}
 	}
 
 	ofstream out(outfilename);
@@ -58,7 +67,7 @@ void runSingleThread(const char *filename, size_t kmersize, size_t topcount, con
 
 		++iter;
 
-		if (iter->first < last_max_count)
+		if (iter != global_result.rend() && iter->first < last_max_count)
 		{
 			last_max_count = iter->first;
 			topcount--;
@@ -98,42 +107,20 @@ void printOptions()
 	std::cout << "parameters should be: --filename ${filename} --kmersize ${size} --topcount {count}" << std::endl;
 }
 
-/*
- * 		gzFile openGzipFile(const char *filename, const char *readWrite);
-		void closeGzipFile(gzFile file);
-		size_t readcompressedFile(gzFile file, void *out, size_t len);
-		void writeCompressedFile(gzFile file, const void *buffer, size_t len);
-
- */
-
 void foo()
 {
-	uint64_t kmer = 0;
-	size_t len = 0;
-
-	std::string s = "GTAAACCCGTGTGTACGTAAACCCGTGTGT";
-	uint64_t encoded = encodeSequence(s);
-	uint64_t encoded_read = encodeSequence(s);
-
-#ifdef USE_GZIP 
-	gzFile file = openGzipFile("foo.gz", "w");
-	writeCompressedFile(file, &encoded, sizeof(encoded));
-	closeGzipFile(file);
-
-	file = openGzipFile("foo.gz", "r");
-	while ((len = readcompressedFile(file, &encoded_read, sizeof(encoded_read))) > 0)
-	{
-		std::cout << encoded << " " << encoded_read << " " << std::endl;
-		std::cout <<  decodeSequence(encoded_read, s.length()) << std::endl;
-		std::cout <<  s << std::endl;
-	}
-	closeGzipFile(file);
-#endif
-
+	size_t size = 10000;
+	std::vector<bool> bools(size);
+	bools[size - 1] = true;
+	cout << bools.size() * sizeof(bool) << std::endl;
+	
 }
 
 int main(int argc, char **argv) 
 {
+	foo();
+	/*
+	 *
 	auto filename = getCmdOption(argv, argv + argc, "--filename");
 	auto kmersize = getCmdOption(argv, argv + argc, "--kmersize");
 	auto topcount = getCmdOption(argv, argv + argc, "--topcount");
@@ -159,4 +146,5 @@ int main(int argc, char **argv)
 		// TODO clear objects here (files etc.)
 		throw;
 	}
+	 */
 }

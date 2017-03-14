@@ -18,7 +18,7 @@ public:
 private:
 	std::vector<unsigned short> m_counters;
 	/*
-	 * There is some complaints about the vector<bool> on the internet.
+	 * There are some complaints about the vector<bool> on the internet.
 	 * It is claimed that it does not guarantee contiguous memory.
 	 http://stackoverflow.com/questions/19562667/how-to-zero-a-vectorbool
 	 */

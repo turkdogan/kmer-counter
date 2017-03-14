@@ -21,12 +21,11 @@ class FastqReader {
 
 public:
 	FastqReader(const char *filename);
+	FastqReader(const char *filename, bool);
 	std::vector<KmerFile *> generateKmers(size_t kmersize);
 
-private:
-	void insert_sequence(std::map<std::string, std::ostringstream> &buffer_map);
-
 	bool readNextSequence(std::string &line);
+private:
 
 	std::ifstream m_file;
 

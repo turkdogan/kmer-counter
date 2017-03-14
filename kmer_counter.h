@@ -39,7 +39,6 @@ private:
 	std::map<uint64_t, size_t> m_kmer_to_count_map;
 	std::multimap<size_t, uint64_t> m_final_map;
 
-	void processMapWithoutBloomFilter();
 	void processMapWithBloomFilter();
 
 	void mergeBucketKmers();

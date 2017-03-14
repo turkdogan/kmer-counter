@@ -2,9 +2,6 @@
 #include "kmer_utils.h"
 #include <iostream>
 
-// use bloom filter if more than BLOOM_FILTER_THRESHOLD
-#define BLOOM_FILTER_THRESHOLD 1000
-
 namespace
 {
 	template <typename A, typename B>
@@ -38,22 +35,14 @@ TopKmerCounter::TopKmerCounter(KmerFile *kmerfile, size_t kmersize = 30, size_t 
  */
 std::multimap<size_t, uint64_t> TopKmerCounter::findTopKmers()
 {
-	if (m_kmercount_in_sequence_file < BLOOM_FILTER_THRESHOLD)
-	{
-		//processMapWithoutBloomFilter();
-		processMapWithBloomFilter();
-	}
-	else
-	{
-		processMapWithBloomFilter();
-	}
+	processMapWithBloomFilter();
 	mergeBucketKmers();
 	return m_final_map;
 }
 
 void TopKmerCounter::processMapWithBloomFilter()
 {
-	m_bloom_filter = new BloomFilter(m_kmercount_in_sequence_file * 100, 4);
+	m_bloom_filter = new BloomFilter(m_kmercount_in_sequence_file * 10, 5);
 	uint64_t kmer = 0;
 	std::map<uint64_t, size_t> map;
 
@@ -62,7 +51,6 @@ void TopKmerCounter::processMapWithBloomFilter()
 	//char *buffer = new char[m_kmersize + 1];
 	while ((len = readcompressedFile(m_file, &kmer, sizeof(kmer))) > 0)
 	{
-		std::cout << decodeSequence(kmer, m_kmersize) << std::endl;
 #else
 	while (m_file.read((char*)&kmer, sizeof(kmer)))
 	{
@@ -95,26 +83,6 @@ void TopKmerCounter::processMapWithBloomFilter()
 	m_file.close();
 #endif
 	delete m_bloom_filter;
-}
-
-void TopKmerCounter::processMapWithoutBloomFilter()
-{
-	/*
-	 *
-	std::string kmer;
-#ifdef USE_GZIP 
-	size_t len;
-	char *buffer = new char[m_kmersize + 1];
-	while ((len = readcompressedFile(m_file, buffer, m_kmersize, true)) > 0)
-	{
-		kmer = std::string(buffer);
-#else
-	while (std::getline(m_file, kmer))
-	{
-#endif
-		m_kmer_to_count_map[kmer]++;
-	}
-	 */
 }
 
 /*
@@ -150,7 +118,7 @@ void TopKmerCounter::mergeBucketKmers()
 		// # of kmemrs can be more than m_topcount
 		// for example the following map is legal for m_topcount = 2
 		// "foo1" = 10, "foo2" = 10, "foo3" = 10, "foo4" = 3
-		if (last_max_count > iter->first)
+		if (iter != sorted.rend() && last_max_count > iter->first)
 		{
 			last_max_count = iter->first;
 			top_counter--;
