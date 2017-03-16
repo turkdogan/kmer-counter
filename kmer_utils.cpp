@@ -2,56 +2,6 @@
 #include <iostream>
 #include <sstream>
 
-#ifdef USE_GZIP 
-
-gzFile openGzipFile(const char *filename, const char *readWrite)
-{
-	gzFile file = gzopen(filename, readWrite);
-	if (!file) {
-		fprintf(stderr, "gzopen of '%s' failed: %s.\n", filename,
-			strerror(errno));
-		exit(EXIT_FAILURE);
-	}
-	return file;
-}
-
-void closeGzipFile(gzFile file)
-{
-	gzclose(file);
-}
-
-size_t readcompressedFile(gzFile file, void *out, size_t len)
-{
-	int err;
-	size_t bytes_read;
-	bytes_read = gzread(file, out, len);
-	// printf ("%s", buffer);
-	if (bytes_read < len) {
-		if (!gzeof(file)) {
-			const char * error_string;
-			error_string = gzerror(file, &err);
-			if (err) {
-				fprintf(stderr, "Error: %s.\n", error_string);
-				exit(EXIT_FAILURE);
-			}
-		}
-	}
-	return bytes_read;
-}
-
-void writeCompressedFile(gzFile file, const void *buffer, size_t len)
-{
-	int bytes_written = gzwrite(file, buffer, len);
-	if (bytes_written == 0)
-	{
-		int err_no = 0;
-		fprintf(stderr, "Error during compression: %s", gzerror(file, &err_no));
-		gzclose(file);
-	}
-}
-
-#endif
-
 static inline uint8_t ctobits(char c)
 {
 	switch (c) {
@@ -115,12 +65,35 @@ void decodeSequence(uint64_t seq, char *buf, size_t size)
 	*buf = '\0';
 }
 
+size_t findKmers(const std::string &sequence, size_t kmersize, std::vector<uint64_t> &buffer)
+{
+	if (kmersize < 1 || kmersize > sequence.size())
+	{
+		throw std::invalid_argument(
+			"Recieved invalid sequence or kmer_size: " + sequence +
+			" kmer_size: " + std::to_string(kmersize));
+	}
+	std::vector<std::uint64_t> kmers;
+	size_t size = sequence.size();
+	size_t size_response = size - kmersize + 1;
+	if (buffer.size() <= size_response)
+	{
+		buffer.resize(size_response);
+	}
+	for (size_t i = 0; i <= size - kmersize; i++)
+	{
+		std::string kmer = sequence.substr(i, kmersize);
+		buffer[i] = encodeSequence(kmer);
+	}
+	return size_response;
+}
+
 std::vector<std::uint64_t> findKmers(const std::string &sequence, size_t kmersize)
 {
 	if (kmersize < 1 || kmersize > sequence.size())
 	{
 		throw std::invalid_argument(
-			"Recieved invalid sequence or kmer_size: " + sequence + 
+			"Recieved invalid sequence or kmer_size: " + sequence +
 			" kmer_size: " + std::to_string(kmersize));
 	}
 	std::vector<std::uint64_t> kmers;
@@ -130,15 +103,12 @@ std::vector<std::uint64_t> findKmers(const std::string &sequence, size_t kmersiz
 		std::string kmer = sequence.substr(i, kmersize);
 		uint64_t encoded = encodeSequence(kmer);
 		kmers.push_back(encoded);
-		//kmers.push_back(sequence.substr(i, kmersize));
 	}
 	return kmers;
 }
 
 void insert_kmer_to_map(std::string &kmer, std::map<uint64_t, int> &map)
 {
-	// TODO check it
-	// TODO write test
 	uint64_t key = encodeSequence(kmer);
 	map[key]++;
 }
@@ -155,32 +125,4 @@ uint64_t encodeSequence(std::string &kmer)
 		ret |= v << nr_shift;
 	}
 	return ret;
-}
-
-std::vector<std::string> generateAllThreeCharSequenceCombinations()
-{
-	std::vector<std::string> sequence_combinations;
-	std::string genomChars("ACGT");
-	for (auto c1 : genomChars)
-	{
-		std::string s1(1, c1);
-		for (auto c2 : genomChars)
-		{
-			std::string s2(1, c2);
-			for (auto c3 : genomChars)
-			{
-				std::string s3(1, c3);
-				for (auto c4 : genomChars)
-				{
-					std::string s4(1, c4);
-					for (auto c5: genomChars)
-					{
-						std::string s5(1, c5);
-						sequence_combinations.push_back(s1 + s2 + s3 + s4 + s5);
-					}
-				}
-			}
-		}
-	}
-	return sequence_combinations;
 }

@@ -1,94 +1,45 @@
-#include "common.h"
 #include "kmer_counter.h"
 #include "kmer_utils.h"
 #include <iostream>
 #include <ctime>
-#include <algorithm>
-#include <stdio.h>
-#include <mutex>
-#include <future>
 #include <sstream>
-
+#include <algorithm>
 
 using namespace std;
 
-std::multimap<size_t, uint64_t> global_result;
-
-void deleteTempFile(const KmerFile *kmerFile)
+void runSingleThread(const char *filename, size_t kmersize, size_t topcount, const char *outfilename, size_t kmignore)
 {
-#ifdef USE_GZIP 
-		std::remove((kmerFile->filename + ".gz").c_str());
-#else
-		std::remove((kmerFile->filename).c_str());
-#endif
-}
-
-void getTopKmers(KmerFile *kmer_file, size_t kmersize, size_t topcount)
-{
-	auto kmer_counter = new TopKmerCounter(kmer_file, kmersize, topcount);
-	auto map = kmer_counter->findTopKmers();
-	global_result.insert(map.begin(), map.end());
-	delete kmer_counter;
-	map.clear();
-	deleteTempFile(kmer_file);
-}
-
-void runSingleThread(const char *filename, size_t kmersize, size_t topcount, const char *outfilename)
-{
-	
 	auto fastq_reader = new FastqReader(filename);
-	auto kmer_files = fastq_reader->generateKmers(kmersize);
-	delete fastq_reader;
-
-
-	for (auto &kmer_file : kmer_files)
-	{
-		// we do not need to 
-		if (kmer_file->kmercount > 0)
-		{
-			getTopKmers(kmer_file, kmersize, topcount);
-		} 
-		else
-		{
-			deleteTempFile(kmer_file);
-		}
-	}
+	auto kmer_counter = new TopKmerCounter(fastq_reader, kmersize, topcount, kmignore);
+	auto map = kmer_counter->findTopKmers();
 
 	ofstream out(outfilename);
 
-	auto iter = global_result.rbegin();
+	auto iter = map.rbegin();
 
 	// find m_topcount elements (including duplicates)
-	while (iter != global_result.rend() && topcount > 0)
+	while (iter != map.rend())
 	{
-		auto last_max_count = iter->first;
-		std::cout << iter->first << " : " << decodeSequence(iter->second, kmersize)<< std::endl;
+		std::cout << iter->first << " : " << decodeSequence(iter->second, kmersize) << std::endl;
 		out << iter->first << " : " << decodeSequence(iter->second, kmersize) << std::endl;
-
 		++iter;
-
-		if (iter != global_result.rend() && iter->first < last_max_count)
-		{
-			last_max_count = iter->first;
-			topcount--;
-		}
 	}
 	std::cout << "Results are in the " << outfilename << std::endl;
 
 	out.close();
 
-	global_result.clear();
+	delete kmer_counter;
+	delete fastq_reader;
+	map.clear();
 }
 
-void runApplication(const char *filename, size_t kmersize, size_t topcount, const char *outfilename)
+void runApplication(const char *filename, size_t kmersize, size_t topcount, const char *outfilename, size_t kmignore)
 {
 	std::cout << "filename: " << filename << endl;
 	std::cout << "kmer size: " << kmersize << endl;
 	std::cout << "top count: " << topcount << endl;
 
-	runSingleThread(filename, kmersize, topcount, outfilename);
-	// runMultiThread(filename, kmersize, topcount, outfilename);
-
+	runSingleThread(filename, kmersize, topcount, outfilename, kmignore);
 }
 
 // http://stackoverflow.com/questions/865668/how-to-parse-command-line-arguments-in-c
@@ -104,26 +55,15 @@ char* getCmdOption(char ** begin, char ** end, const std::string & option)
 
 void printOptions()
 {
-	std::cout << "parameters should be: --filename ${filename} --kmersize ${size} --topcount {count}" << std::endl;
+	std::cout << "parameters should be: --filename ${filename} --kmersize ${size} --topcount {count} --kmignore {size}" << std::endl;
 }
 
-void foo()
+int main(int argc, char **argv)
 {
-	size_t size = 10000;
-	std::vector<bool> bools(size);
-	bools[size - 1] = true;
-	cout << bools.size() * sizeof(bool) << std::endl;
-	
-}
-
-int main(int argc, char **argv) 
-{
-	foo();
-	/*
-	 *
 	auto filename = getCmdOption(argv, argv + argc, "--filename");
 	auto kmersize = getCmdOption(argv, argv + argc, "--kmersize");
 	auto topcount = getCmdOption(argv, argv + argc, "--topcount");
+	auto kmignore = getCmdOption(argv, argv + argc, "--kmignore");
 
 	if (!filename || !kmersize || !topcount)
 	{
@@ -135,10 +75,15 @@ int main(int argc, char **argv)
 	{
 		outfilename = (char *)"out.txt";
 	}
+	size_t km_ignore = 0;
+	if (kmignore)
+	{
+		km_ignore = std::stoi(kmignore);
+	}
 
 	try {
 		auto begin_time = clock();
-		runApplication(filename, std::stoi(kmersize), std::stoi(topcount), outfilename);
+		runApplication(filename, std::stoi(kmersize), std::stoi(topcount), outfilename, km_ignore);
 		std::cout << "Total duration: " << float(clock() - begin_time) / (CLOCKS_PER_SEC * 60) << " minutes" << std::endl;
 	}
 	catch (const std::exception &e) {
@@ -146,5 +91,4 @@ int main(int argc, char **argv)
 		// TODO clear objects here (files etc.)
 		throw;
 	}
-	 */
 }

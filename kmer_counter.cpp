@@ -2,11 +2,13 @@
 #include "kmer_utils.h"
 #include <iostream>
 
+#define SMALL_FILE_KMER_COUNT 10000
+
 namespace
 {
 	template <typename A, typename B>
-	std::multimap<B, A> flip_map(std::map<A, B> & src) {
-
+	std::multimap<B, A> flip_map(std::map<A, B> & src)
+	{
 		std::multimap<B, A> destination;
 
 		for (auto it = src.begin(); it != src.end(); ++it)
@@ -16,89 +18,92 @@ namespace
 	}
 }
 
-TopKmerCounter::TopKmerCounter(KmerFile *kmerfile, size_t kmersize = 30, size_t topcount = 25)
-#ifdef USE_GZIP 
-	: m_kmercount_in_sequence_file(kmerfile->kmercount), m_kmersize(kmersize), m_topcount(topcount)
-#else
-	: m_file(kmerfile->filename), m_kmercount_in_sequence_file(kmerfile->kmercount), m_kmersize(kmersize), m_topcount(topcount)
-#endif
+TopKmerCounter::TopKmerCounter(FastqReader *reader, size_t kmersize = 30, size_t topcount = 25, size_t kmignore = 0)
+	: m_file(reader), m_kmersize(kmersize), m_topcount(topcount)
 {
-#ifdef USE_GZIP 
-	std::string compressed_file(kmerfile->filename + ".gz");
-	m_file = openGzipFile(compressed_file.c_str(), "r");
-#endif
+	m_approx_kmer_count = reader->getApproximateKmercount(kmersize);
+	reader->reload();
+	if (kmignore == 0)
+	{
+		size_t small_file_kmer_size = SMALL_FILE_KMER_COUNT;
+		if (m_approx_kmer_count < small_file_kmer_size)
+		{
+			m_ignored_kmer_count = 1;
+		}
+		else if (m_approx_kmer_count < small_file_kmer_size * 10)
+		{
+			m_ignored_kmer_count = 4;
+		}
+		else if (m_approx_kmer_count < small_file_kmer_size * 100 * 100)
+		{
+			m_ignored_kmer_count = 10;
+		}
+		else if (m_approx_kmer_count < small_file_kmer_size * 1000 * 100)
+		{
+			m_ignored_kmer_count = 50;
+		}
+		else
+		{
+			m_ignored_kmer_count = 255;
+		}
+	}
+	else
+	{
+		m_ignored_kmer_count = kmignore;
+	}
 }
 
 /*
  * Returns topcount k-mers in the given sequence file
- * The unique kmers are ignored. 
+ * The unique kmers are ignored.
  */
 std::multimap<size_t, uint64_t> TopKmerCounter::findTopKmers()
 {
 	processMapWithBloomFilter();
-	mergeBucketKmers();
+	postprocess();
 	return m_final_map;
 }
 
 void TopKmerCounter::processMapWithBloomFilter()
 {
-	m_bloom_filter = new BloomFilter(m_kmercount_in_sequence_file * 10, 5);
-	uint64_t kmer = 0;
-	std::map<uint64_t, size_t> map;
+	std::cout << "ignore: " << m_ignored_kmer_count << std::endl;
+	m_bloom_filter = new BloomFilter(m_approx_kmer_count * 5, 5, m_ignored_kmer_count);
+	std::string line;
 
-#ifdef USE_GZIP
-	size_t len;
-	//char *buffer = new char[m_kmersize + 1];
-	while ((len = readcompressedFile(m_file, &kmer, sizeof(kmer))) > 0)
+	while (m_file->readNextSequence(line))
 	{
-#else
-	while (m_file.read((char*)&kmer, sizeof(kmer)))
-	{
-#endif
-		map[kmer]++;
-		// A couple of reason to "trust" bloom filter:
-		// 1 - False positive is ratio is very low, 
-		// because in every BUCKET_SIZE, bloom filter is cleared
-		// 2 - False positive is ignorable because,
-		// we are finding the top "n" count of kmers.
-		// the false positive k-mers cannot be in the top k-mers
-		if (m_bloom_filter->contains(kmer))
+		auto buffer = findKmers(line, m_kmersize);
+		for (size_t i = 0; i < buffer.size(); i++)
 		{
-			// if the bloom filter already contains
-			// add it to the counter hash table
-			m_kmer_to_count_map[kmer]++;
-		} 
-		else
-		{
-			// the second encountered k-mer is inserted into the bloom filter
-			// it is not inserted to the hash map. As most of the kmers in a 
-			// genome is unique, which speeds up the code. When calculating 
-			// the final counts, we add +1 to the result for this kmer.
-			m_bloom_filter->add(kmer);
+			uint64_t kmer = buffer[i];
+			size_t response = m_bloom_filter->add(kmer);
+			if (response != 0)
+			{
+				if (m_kmer_to_count_map.count(kmer) == 0)
+				{
+					m_kmer_to_count_map[kmer] = response + 1;
+				}
+				else
+				{
+					m_kmer_to_count_map[kmer]++;
+				}
+			}
 		}
+		buffer.clear();
 	}
-#ifdef USE_GZIP 
-	closeGzipFile(m_file);
-#else
-	m_file.close();
-#endif
-	delete m_bloom_filter;
 }
 
 /*
- * On every BUKET_SIZE k-mer top m_topcount kmers are kept
- * on a temp map. This map may contain more than m_topcount kmers.
- * Because some k-mers count can be equal to each other. Both of them
- * must be kept
+ * Sort map
  */
-void TopKmerCounter::mergeBucketKmers()
+void TopKmerCounter::postprocess()
 {
 	// sort map by count
 	auto sorted = flip_map(m_kmer_to_count_map);
 
 	auto top_counter = m_topcount;
 
-	// map is sorted by ascending order,
+	// map is sorted by ascending order
 	// to iterate from end for descending count order
 	auto iter = sorted.rbegin();
 
@@ -112,7 +117,7 @@ void TopKmerCounter::mergeBucketKmers()
 		// +1 for the kmer in the bloom filter
 		//char *decoded;
 		//decodeSequence(iter->second, decoded, m_kmersize);
-		m_final_map.insert(std::make_pair(iter->first + 1, iter->second));
+		m_final_map.insert(std::make_pair(iter->first, iter->second));
 		++iter;
 
 		// # of kmemrs can be more than m_topcount
@@ -129,4 +134,5 @@ void TopKmerCounter::mergeBucketKmers()
 
 TopKmerCounter::~TopKmerCounter()
 {
+	delete m_bloom_filter;
 }
